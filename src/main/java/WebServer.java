@@ -56,12 +56,25 @@ public class WebServer {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
              OutputStream out = clientSocket.getOutputStream()) {
             String requestLine = in.readLine();
-            if (requestLine == null || !requestLine.startsWith("GET ")) {
-                sendError(out, 400, "Bad Request");
+            if (requestLine == null || (!requestLine.startsWith("GET "))) {
+                sendError(out, "HTTP/1.1", 400, "Bad Request");
                 return;
             }
-            // String[] parts = requestLine.split(" ");
-            String rawPath = requestLine.split(" ")[1];
+            String[] parts = requestLine.split(" ");
+            String rawPath = parts[1];
+            String httpVersion = (parts.length > 2) ? parts[2] : "HTTP/1.0";
+            boolean isHttp11 = httpVersion.equalsIgnoreCase("HTTP/1.1");
+            boolean hasHost = false;
+            String line;
+            while ((line = in.readLine()) != null && !line.isEmpty()) {
+                if (line.toLowerCase().startsWith("host:")) {
+                    hasHost = true;
+                }
+            }
+            if (isHttp11 && !hasHost) {
+                sendError(out, httpVersion, 400, "Host header required");
+                return;
+            }
             String path = java.net.URLDecoder.decode(rawPath, java.nio.charset.StandardCharsets.UTF_8);
             if (path.equals("/") || path.isBlank()) {
                 path = "index.html";
@@ -73,25 +86,24 @@ public class WebServer {
             Path filePath = Paths.get(documentRoot)
                      .resolve(path)
                      .normalize();
-            System.out.println(path);
-            System.out.println(filePath);
             if (!filePath.toAbsolutePath().normalize().startsWith(Paths.get(documentRoot).toAbsolutePath().normalize())) {
-                sendError(out, 403, "Forbidden");
+                sendError(out, httpVersion, 403, "Forbidden");
                 return;
             }
             if (!Files.exists(filePath)) {
-                sendError(out, 404, "Not Found");
+                sendError(out, httpVersion, 404, "Not Found");
                 return;
             }
             if (!Files.isReadable(filePath)) {
-                sendError(out, 403, "Forbidden");
+                sendError(out, httpVersion, 403, "Forbidden");
                 return;
             }
             String contentType = Files.probeContentType(filePath);
             byte[] content = Files.readAllBytes(filePath);
-            String response = "HTTP/1.0 200 OK\r\n" +
+            String response = httpVersion + " 200 OK\r\n" +
                     "Content-Type: " + (contentType != null ? contentType : "application/octet-stream") + "\r\n" +
                     "Content-Length: " + content.length + "\r\n" +
+                    "Connection: close\r\n" +
                     "\r\n";
             out.write(response.getBytes());
             out.write(content);
@@ -102,7 +114,7 @@ public class WebServer {
         }
     }
 
-    private void sendError(OutputStream out, int code, String message) throws IOException {
+    private void sendError(OutputStream out, String proto, int code, String message) throws IOException {
         String reason;
         switch (code) {
             case 400: reason = "Bad Request"; break;
@@ -111,8 +123,9 @@ public class WebServer {
             case 200: reason = "OK"; break;
             default: reason = message; break;
         }
-        String response = "HTTP/1.0 " + code + " " + reason + "\r\n" +
+        String response = proto + " " + code + " " + reason + "\r\n" +
                 "Content-Type: text/plain\r\n" +
+                "Connection: close\r\n" +
                 "\r\n" +
                 reason;
         out.write(response.getBytes());
