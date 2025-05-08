@@ -1,5 +1,3 @@
-
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -59,7 +57,7 @@ public class WebServer {
              OutputStream out = clientSocket.getOutputStream()) {
             String requestLine = in.readLine();
             if (requestLine == null || !requestLine.startsWith("GET ")) {
-                sendError(out, 400, "Please use GET method");
+                sendError(out, 400, "Bad Request");
                 return;
             }
             // String[] parts = requestLine.split(" ");
@@ -78,7 +76,7 @@ public class WebServer {
             System.out.println(path);
             System.out.println(filePath);
             if (!filePath.toAbsolutePath().normalize().startsWith(Paths.get(documentRoot).toAbsolutePath().normalize())) {
-                sendError(out, 403, "No athorization to access this file");
+                sendError(out, 403, "Forbidden");
                 return;
             }
             if (!Files.exists(filePath)) {
@@ -86,7 +84,7 @@ public class WebServer {
                 return;
             }
             if (!Files.isReadable(filePath)) {
-                sendError(out, 403, "Unreadable file");
+                sendError(out, 403, "Forbidden");
                 return;
             }
             String contentType = Files.probeContentType(filePath);
@@ -105,10 +103,18 @@ public class WebServer {
     }
 
     private void sendError(OutputStream out, int code, String message) throws IOException {
-        String response = "HTTP/1.0 " + code + " " + message + "\r\n" +
+        String reason;
+        switch (code) {
+            case 400: reason = "Bad Request"; break;
+            case 403: reason = "Forbidden"; break;
+            case 404: reason = "Not Found"; break;
+            case 200: reason = "OK"; break;
+            default: reason = message; break;
+        }
+        String response = "HTTP/1.0 " + code + " " + reason + "\r\n" +
                 "Content-Type: text/plain\r\n" +
                 "\r\n" +
-                message;
+                reason;
         out.write(response.getBytes());
     }
 
