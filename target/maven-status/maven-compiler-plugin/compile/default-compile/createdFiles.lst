@@ -1,4 +1,0 @@
-com\webserver\WebServerApplication.class
-com\webserver\controller\FileController.class
-com\webserver\service\FileService.class
-com\webserver\ServerConfig.class
